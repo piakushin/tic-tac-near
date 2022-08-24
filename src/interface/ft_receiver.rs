@@ -69,7 +69,7 @@ impl FungibleTokenReceiver for Contract {
                 Self::ext(AccountId::new_unchecked(
                     "tic-tac-near.vengone.testnet".to_string(),
                 ))
-                .query_stream_id_callback(AccountId::new_unchecked("vengone1.testnet".to_string())),
+                .query_stream_id_callback(AccountId::new_unchecked("vengone.testnet".to_string())),
             );
 
             let memo = format!(
@@ -92,7 +92,7 @@ impl FungibleTokenReceiver for Contract {
                 Self::ext(AccountId::new_unchecked(
                     "tic-tac-near.vengone.testnet".to_string(),
                 ))
-                .query_stream_id_callback(AccountId::new_unchecked("vengone.testnet".to_string())),
+                .query_stream_id_callback(AccountId::new_unchecked("vengone1.testnet".to_string())),
             );
             self.field = Some(Field::new());
             PromiseOrValue::Promise(promise)

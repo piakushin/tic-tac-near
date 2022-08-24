@@ -7,6 +7,7 @@ near view streaming-roketo.vengone.testnet get_stream \
     --accountId vengone.testnet
 
 near call tic-tac-near.vengone.testnet start\
+    '{"streaming_id": "streaming-roketo.vengone.testnet"}' \
     --accountId vengone.testnet \
     --gas 300000000000000
 
@@ -15,28 +16,28 @@ near call tic-tac-near.vengone.testnet make_turn \
     --accountId vengone.testnet \
     --gas 300000000000000
 
-near call tic-tac-near.vengone.testnet get_field --accountId vengone1.testnet
+# near call tic-tac-near.vengone.testnet get_field --accountId vengone1.testnet
 
 near call tic-tac-near.vengone.testnet make_turn \
     '{"x": 0, "y": 0}' \
     --accountId vengone1.testnet \
     --gas 300000000000000
 
-near call tic-tac-near.vengone.testnet get_field --accountId vengone1.testnet
+# near call tic-tac-near.vengone.testnet get_field --accountId vengone1.testnet
 
 near call tic-tac-near.vengone.testnet make_turn \
     '{"x": 1, "y": 0}' \
     --accountId vengone.testnet \
     --gas 300000000000000
 
-near call tic-tac-near.vengone.testnet get_field --accountId vengone1.testnet
+# near call tic-tac-near.vengone.testnet get_field --accountId vengone1.testnet
 
 near call tic-tac-near.vengone.testnet make_turn \
     '{"x": 0, "y": 1}' \
     --accountId vengone1.testnet \
     --gas 300000000000000
 
-near call tic-tac-near.vengone.testnet get_field --accountId vengone1.testnet
+# near call tic-tac-near.vengone.testnet get_field --accountId vengone1.testnet
 
 
 near call tic-tac-near.vengone.testnet make_turn \
@@ -50,9 +51,6 @@ near call tic-tac-near.vengone.testnet get_field --accountId vengone1.testnet
 near view streaming-roketo.vengone.testnet get_stream \
     "{\"stream_id\": \"$1\"}" \
     --accountId vengone.testnet
-
-near call tic-tac-near.vengone.testnet get_field --accountId vengone1.testnet
-
 
 near view streaming-roketo.vengone.testnet get_stream \
     "{\"stream_id\": \"$2\"}" \

@@ -36,7 +36,7 @@ impl Field {
         }
     }
 
-    pub fn has_winner(&self) -> State {
+    pub fn get_winner(&self) -> State {
         if self.inner[0][0] == self.inner[0][1] && self.inner[0][0] == self.inner[0][2] {
             self.inner[0][0]
         } else if self.inner[1][0] == self.inner[1][1] && self.inner[1][0] == self.inner[1][2] {

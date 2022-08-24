@@ -6,7 +6,10 @@ mod views;
 
 use std::collections::HashMap;
 
-use external::{streaming_roketo::streaming_roketo, wrap_near::wrap};
+use external::{
+    streaming_roketo::streaming_roketo::{self, StreamingRoketoExt},
+    wrap_near::wrap,
+};
 use field::{Field, State};
 use near_sdk::{
     borsh::{self, BorshDeserialize, BorshSerialize},
@@ -14,7 +17,7 @@ use near_sdk::{
     json_types::U128,
     log, near_bindgen,
     serde_json::Value,
-    AccountId, Gas, Promise, PromiseError, PromiseOrValue,
+    AccountId, Gas, Promise, PromiseError,
 };
 use player::Player;
 use serde::Serialize;
@@ -28,6 +31,7 @@ pub struct Contract {
     turn: Option<u8>,
     first: Option<Player>,
     second: Option<Player>,
+    streaming_id: Option<AccountId>,
 }
 
 #[near_bindgen]
@@ -41,42 +45,24 @@ impl Contract {
             turn: None,
             first: None,
             second: None,
+            streaming_id: None,
         }
     }
 
-    pub fn start(&mut self) -> Promise {
-        let first = self.first.as_ref().unwrap();
-        let second = self.second.as_ref().unwrap();
+    pub fn start(&mut self, streaming_id: AccountId) -> Promise {
+        self.streaming_id = Some(streaming_id.clone());
+        let first = self.first.as_ref().unwrap().stream().unwrap().clone();
+        let second = self.second.as_ref().unwrap().stream().unwrap();
 
         self.turn = Some(0);
-        let promise = streaming_roketo::ext(AccountId::new_unchecked(
-            "streaming-roketo.vengone.testnet".to_string(),
-        ))
-        .with_attached_deposit(1)
-        .with_static_gas(Gas(60 * TGAS))
-        .start_stream(first.stream().unwrap().clone());
+        let promise = start_stream(streaming_id.clone(), first);
 
-        let promise = promise.then(
-            streaming_roketo::ext(AccountId::new_unchecked(
-                "streaming-roketo.vengone.testnet".to_string(),
-            ))
-            .with_attached_deposit(1)
-            .with_static_gas(Gas(60 * TGAS))
-            .start_stream(second.stream().unwrap().clone()),
-        );
+        let promise = promise.then(start_stream(streaming_id.clone(), second.clone()));
 
-        let promise = promise.then(
-            streaming_roketo::ext(AccountId::new_unchecked(
-                "streaming-roketo.vengone.testnet".to_string(),
-            ))
-            .with_attached_deposit(1)
-            .with_static_gas(Gas(60 * TGAS))
-            .pause_stream(second.stream().unwrap().clone()),
-        );
-        promise
+        promise.then(pause_stream(streaming_id, second.clone()))
     }
 
-    pub fn make_turn(&mut self, x: u8, y: u8) -> PromiseOrValue<AccountId> {
+    pub fn make_turn(&mut self, x: u8, y: u8) -> Promise {
         let first = self.first.as_ref().unwrap();
         let second = self.second.as_ref().unwrap();
         let current = env::signer_account_id();
@@ -88,150 +74,13 @@ impl Contract {
             assert!(first.account() == &current, "it's first player's turn");
             field.set_x(x, y);
             *self.turn.as_mut().unwrap() += 1;
-
-            match field.has_winner() {
-                State::Empty => {
-                    let promise = streaming_roketo::ext(AccountId::new_unchecked(
-                        "streaming-roketo.vengone.testnet".to_string(),
-                    ))
-                    .with_attached_deposit(1)
-                    .with_static_gas(Gas(60 * TGAS))
-                    .pause_stream(first.stream().unwrap().clone())
-                    .then(
-                        streaming_roketo::ext(AccountId::new_unchecked(
-                            "streaming-roketo.vengone.testnet".to_string(),
-                        ))
-                        .with_attached_deposit(1)
-                        .with_static_gas(Gas(60 * TGAS))
-                        .start_stream(second.stream().unwrap().clone()),
-                    );
-                    PromiseOrValue::Promise(promise)
-                }
-                State::X => {
-                    let promise = streaming_roketo::ext(AccountId::new_unchecked(
-                        "streaming-roketo.vengone.testnet".to_string(),
-                    ))
-                    .with_attached_deposit(1)
-                    .stop_stream(first.stream().unwrap().clone());
-                    streaming_roketo::ext(AccountId::new_unchecked(
-                        "streaming-roketo.vengone.testnet".to_string(),
-                    ))
-                    .with_attached_deposit(1)
-                    .stop_stream(second.stream().unwrap().clone());
-                    let promise = promise.then({
-                        streaming_roketo::ext(AccountId::new_unchecked(
-                            "streaming-roketo.vengone.testnet".to_string(),
-                        ))
-                        .with_attached_deposit(1)
-                        .get_stream(first.stream().unwrap().clone())
-                        .then(
-                            Self::ext(AccountId::new_unchecked(
-                                "streaming-roketo.vengone.testnet".to_string(),
-                            ))
-                            .query_transferred_tokens_callback(first.account().clone()),
-                        )
-                    });
-                    PromiseOrValue::Promise(promise)
-                }
-                State::O => {
-                    let promise = streaming_roketo::ext(AccountId::new_unchecked(
-                        "streaming-roketo.vengone.testnet".to_string(),
-                    ))
-                    .with_attached_deposit(1)
-                    .stop_stream(second.stream().unwrap().clone());
-                    streaming_roketo::ext(AccountId::new_unchecked(
-                        "streaming-roketo.vengone.testnet".to_string(),
-                    ))
-                    .with_attached_deposit(1)
-                    .stop_stream(first.stream().unwrap().clone());
-                    let promise = promise.then({
-                        streaming_roketo::ext(AccountId::new_unchecked(
-                            "streaming-roketo.vengone.testnet".to_string(),
-                        ))
-                        .with_attached_deposit(1)
-                        .get_stream(first.stream().unwrap().clone())
-                        .then(
-                            Self::ext(AccountId::new_unchecked(
-                                "streaming-roketo.vengone.testnet".to_string(),
-                            ))
-                            .query_transferred_tokens_callback(first.account().clone()),
-                        )
-                    });
-                    PromiseOrValue::Promise(promise)
-                }
-            }
+            self.check_winner(self.first.as_ref().unwrap(), self.second.as_ref().unwrap())
         } else if rem == 1 {
+            log!("first: {}, current: {}", first.account(), current);
             assert!(second.account() == &current, "it's second player's turn");
             field.set_o(x, y);
             *self.turn.as_mut().unwrap() += 1;
-
-            match field.has_winner() {
-                State::Empty => {
-                    let promise = streaming_roketo::ext(AccountId::new_unchecked(
-                        "streaming-roketo.vengone.testnet".to_string(),
-                    ))
-                    .with_attached_deposit(1)
-                    .with_static_gas(Gas(60 * TGAS))
-                    .pause_stream(second.stream().unwrap().clone())
-                    .then(
-                        streaming_roketo::ext(AccountId::new_unchecked(
-                            "streaming-roketo.vengone.testnet".to_string(),
-                        ))
-                        .with_attached_deposit(1)
-                        .with_static_gas(Gas(60 * TGAS))
-                        .start_stream(first.stream().unwrap().clone()),
-                    );
-                    PromiseOrValue::Promise(promise)
-                }
-                State::X => {
-                    let promise = streaming_roketo::ext(AccountId::new_unchecked(
-                        "streaming-roketo.vengone.testnet".to_string(),
-                    ))
-                    .stop_stream(first.stream().unwrap().clone());
-                    streaming_roketo::ext(AccountId::new_unchecked(
-                        "streaming-roketo.vengone.testnet".to_string(),
-                    ))
-                    .stop_stream(second.stream().unwrap().clone());
-                    let promise = promise.then({
-                        streaming_roketo::ext(AccountId::new_unchecked(
-                            "streaming-roketo.vengone.testnet".to_string(),
-                        ))
-                        .with_attached_deposit(1)
-                        .get_stream(first.stream().unwrap().clone())
-                        .then(
-                            Self::ext(AccountId::new_unchecked(
-                                "streaming-roketo.vengone.testnet".to_string(),
-                            ))
-                            .query_transferred_tokens_callback(first.account().clone()),
-                        )
-                    });
-                    PromiseOrValue::Promise(promise)
-                }
-                State::O => {
-                    let promise = streaming_roketo::ext(AccountId::new_unchecked(
-                        "streaming-roketo.vengone.testnet".to_string(),
-                    ))
-                    .stop_stream(second.stream().unwrap().clone());
-                    streaming_roketo::ext(AccountId::new_unchecked(
-                        "streaming-roketo.vengone.testnet".to_string(),
-                    ))
-                    .stop_stream(first.stream().unwrap().clone());
-                    let promise = promise.then({
-                        streaming_roketo::ext(AccountId::new_unchecked(
-                            "streaming-roketo.vengone.testnet".to_string(),
-                        ))
-                        .with_attached_deposit(1)
-                        .get_stream(first.stream().unwrap().clone())
-                        .then(
-                            Self::ext(AccountId::new_unchecked(
-                                "streaming-roketo.vengone.testnet".to_string(),
-                            ))
-                            .query_transferred_tokens_callback(first.account().clone()),
-                        )
-                    });
-                    PromiseOrValue::Promise(promise)
-                }
-            }
+            self.check_winner(self.second.as_ref().unwrap(), self.first.as_ref().unwrap())
         } else {
             unreachable!()
         }
@@ -244,12 +93,25 @@ impl Contract {
         player_id: AccountId,
     ) -> Promise {
         let res = call_result.unwrap();
-        let withdrawn = res.get("tokens_total_withdrawn").unwrap().as_u64().unwrap() as u128;
-        let win_money = self.first.as_ref().unwrap().deposit().0 - withdrawn;
-        wrap::ext(AccountId::new_unchecked("wrap.testnet".to_string())).ft_transfer(
-            self.first.as_ref().unwrap().account().clone(),
-            U128::from(win_money),
-        )
+        log!("res: {:?}", res);
+        // let withdrawn = res.get("tokens_total_withdrawn").unwrap().as_u64().unwrap() as u128;
+        let withdrawn = 0;
+        let win_money = if self.first.as_ref().unwrap().account() == &player_id {
+            self.first.as_ref().unwrap().deposit().0
+        } else if self.second.as_ref().unwrap().account() == &player_id {
+            self.second.as_ref().unwrap().deposit().0
+        } else {
+            unreachable!();
+        } - withdrawn;
+        log!("reward {} tokens to {}", win_money, player_id);
+        wrap::ext(AccountId::new_unchecked("wrap.testnet".to_string()))
+            .with_attached_deposit(1)
+            .ft_transfer_call(
+                player_id,
+                U128::from(win_money),
+                String::new(),
+                String::new(),
+            )
     }
 
     #[private]
@@ -272,6 +134,78 @@ impl Contract {
             panic!("unknown player ID");
         }
     }
+}
+
+impl Contract {
+    fn check_winner(&self, active: &Player, passive: &Player) -> Promise {
+        let field = self.field.as_ref().unwrap();
+        let streaming_id = self.streaming_id.as_ref().unwrap();
+        match field.get_winner() {
+            State::Empty => {
+                pause_stream(streaming_id.clone(), active.stream().unwrap().clone()).then(
+                    start_stream(streaming_id.clone(), passive.stream().unwrap().clone()),
+                )
+            }
+            State::X => {
+                let promise = stop_stream(streaming_id.clone(), active.stream().unwrap().clone());
+                let promise = promise.then(stop_stream(
+                    streaming_id.clone(),
+                    passive.stream().unwrap().clone(),
+                ));
+                let promise = promise.then(get_stream(
+                    streaming_id.clone(),
+                    active.stream().unwrap().clone(),
+                ));
+                let promise = promise.then(
+                    Self::ext(AccountId::new_unchecked(String::from(
+                        "tic-tac-near.vengone.testnet",
+                    )))
+                    .query_transferred_tokens_callback(active.account().clone()),
+                );
+                promise
+            }
+            State::O => {
+                let promise = stop_stream(streaming_id.clone(), active.stream().unwrap().clone());
+                let promise = promise.then(stop_stream(
+                    streaming_id.clone(),
+                    active.stream().unwrap().clone(),
+                ));
+                let promise = promise.then(get_stream(
+                    streaming_id.clone(),
+                    active.stream().unwrap().clone(),
+                ));
+                let promise = promise.then(
+                    Self::ext(AccountId::new_unchecked(String::from(
+                        "tic-tac-near.vengone.testnet",
+                    )))
+                    .query_transferred_tokens_callback(passive.account().clone()),
+                );
+                promise
+            }
+        }
+    }
+}
+
+fn streaming(streaming_id: AccountId) -> StreamingRoketoExt {
+    streaming_roketo::ext(streaming_id)
+        .with_attached_deposit(1)
+        .with_static_gas(Gas(60 * TGAS))
+}
+
+fn start_stream(streaming_id: AccountId, stream_id: String) -> Promise {
+    streaming(streaming_id).start_stream(stream_id)
+}
+
+fn pause_stream(streaming_id: AccountId, stream_id: String) -> Promise {
+    streaming(streaming_id).pause_stream(stream_id)
+}
+
+fn stop_stream(streaming_id: AccountId, stream_id: String) -> Promise {
+    streaming(streaming_id).stop_stream(stream_id)
+}
+
+fn get_stream(streaming_id: AccountId, stream_id: String) -> Promise {
+    streaming(streaming_id).get_stream(stream_id)
 }
 
 impl Default for Contract {

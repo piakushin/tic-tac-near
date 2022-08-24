@@ -87,12 +87,12 @@ near call wrap.testnet ft_transfer_call \
     --gas 300000000000000 \
     --accountId vengone1.testnet
 
-echo "\n\n\n<------------------------------------------------------------->"
-echo "Check wNEAR contract balance after."
-echo "<------------------------------------------------------------->"
-near call wrap.testnet ft_balance_of \
-    '{"account_id": "tic-tac-near.vengone.testnet"}' \
-    --accountId vengone1.testnet
+# echo "\n\n\n<------------------------------------------------------------->"
+# echo "Check wNEAR contract balance after."
+# echo "<------------------------------------------------------------->"
+# near call wrap.testnet ft_balance_of \
+#     '{"account_id": "tic-tac-near.vengone.testnet"}' \
+#     --accountId vengone1.testnet
 
 echo "\n\n\n<------------------------------------------------------------->"
 echo "Check game contract status after."
