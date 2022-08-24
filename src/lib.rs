@@ -1,12 +1,17 @@
+mod external;
 mod field;
 mod interface;
 mod player;
 mod views;
 
+use std::collections::HashMap;
+
 use field::{Field, State};
 use near_sdk::{
     borsh::{self, BorshDeserialize, BorshSerialize},
-    env, near_bindgen, AccountId,
+    env, log, near_bindgen,
+    serde_json::Value,
+    AccountId, PromiseError,
 };
 use player::Player;
 use serde::Serialize;
@@ -55,6 +60,24 @@ impl Contract {
             State::Empty => None,
             State::X => Some(self.first.as_ref().unwrap().account().clone()),
             State::O => Some(self.second.as_ref().unwrap().account().clone()),
+        }
+    }
+
+    #[private]
+    pub fn query_stream_id_callback(
+        &mut self,
+        #[callback_result] call_result: Result<HashMap<String, Value>, PromiseError>,
+        player_id: AccountId,
+    ) {
+        let res = call_result.unwrap();
+        let id = res.get("last_created_stream").unwrap().as_str().unwrap();
+        log!("[{}] stream id: {}", player_id, id);
+        if self.first.as_ref().unwrap().account() == &player_id {
+            self.first.as_mut().unwrap().stream = Some(id.to_string());
+        } else if self.second.as_ref().unwrap().account() == &player_id {
+            self.second.as_mut().unwrap().stream = Some(id.to_string());
+        } else {
+            panic!("unknown player ID");
         }
     }
 }

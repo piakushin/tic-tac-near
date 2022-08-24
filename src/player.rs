@@ -10,11 +10,16 @@ use serde::Serialize;
 pub struct Player {
     account: AccountId,
     deposit: U128,
+    pub stream: Option<String>,
 }
 
 impl Player {
     pub fn new(account: AccountId, deposit: U128) -> Self {
-        Self { account, deposit }
+        Self {
+            account,
+            deposit,
+            stream: None,
+        }
     }
 
     pub fn account(&self) -> &AccountId {
@@ -23,5 +28,9 @@ impl Player {
 
     pub fn deposit(&self) -> U128 {
         self.deposit
+    }
+
+    pub fn stream(&self) -> Option<&String> {
+        self.stream.as_ref()
     }
 }
