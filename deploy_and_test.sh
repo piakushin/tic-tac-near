@@ -99,3 +99,18 @@ echo "Check game contract status after."
 echo "<------------------------------------------------------------->"
 near call tic-tac-near.vengone.testnet status \
     --accountId vengone1.testnet
+
+# echo "\n\n\n<------------------------------------------------------------->"
+# echo "Make first turn: first player"
+# echo "<------------------------------------------------------------->"
+# near call tic-tac-near.vengone.testnet make_turn \
+#     '{"x: 1, "y": 1}' \
+#     -- accountId vengone.testnet
+
+# echo "\n\n\n<------------------------------------------------------------->"
+# echo "Make first turn: second player"
+# echo "<------------------------------------------------------------->"
+# near call tic-tac-near.vengone.testnet make_turn \
+#     '{"x: 0, "y": 0}' \
+#     -- accountId vengone1.testnet
+
