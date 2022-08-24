@@ -140,6 +140,17 @@ impl Contract {
         }
     }
 
+    pub fn reset(&mut self) {
+        *self = Self {
+            field: None,
+            turn: None,
+            first: None,
+            second: None,
+            token_id: None,
+            streaming_id: None,
+        };
+    }
+
     #[private]
     pub fn query_transferred_tokens_callback(
         &mut self,

@@ -13,6 +13,8 @@ Quick Start
 
 2. Before initializing the game you must deploy Roke.to smart contract. It's account Id will be passed to game contract on start.
 
+### Manual mode
+
 3. Then you must deploy the game contract.
 
 4. Then you must add streaming contract via `connect_streaming_contract`.
@@ -24,6 +26,20 @@ Quick Start
 6. One by on make turns with `make_turn` method (who would believe).
 
 7. Once any player have reached winning combination, all remaining tokens on stream contract will be transferred to the winner as a reward for it's miserable life.
+
+### Auto mode
+3. Call:
+```sh
+./deploy_and_test.sh
+```
+4. Copy Ids of streams and pass them as arguments to the next script.
+
+5. Run:
+```sh
+./test_game.sh $FIRST_STREAM $SECOND_STREAM
+```
+
+6. Celebrate, you don't need to play this very complicated game. Blockchain will do everything for you!
 
 
 Interacting With The Contract
@@ -57,6 +73,9 @@ near call tic-tac-near.YOURNAME.testnet make_turn \
 ```
 (you can choose your own coordinates for your moves, who would have thought).
 
+## `reset()`
+Completely resets game state. No refunds! (yet).
+
 Getting contract states
 =======================
 ## `status() -> Status`
@@ -87,7 +106,7 @@ If you can't remember 9 3bit values, then it's your salvation.
 call tic-tac-near.YOURNAME.testnet get_field
     --accountId YOURNAME.testnet
 ```
-Example youput:
+Example output:
 ```sh
 {
   [
