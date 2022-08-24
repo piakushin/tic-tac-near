@@ -8,7 +8,7 @@ use std::collections::HashMap;
 
 use external::{
     streaming_roketo::streaming_roketo::{self, StreamingRoketoExt},
-    wrap_near::wrap,
+    token::token,
 };
 use field::{Field, State};
 use near_sdk::{
@@ -31,6 +31,7 @@ pub struct Contract {
     turn: Option<u8>,
     first: Option<Player>,
     second: Option<Player>,
+    token_id: Option<AccountId>,
     streaming_id: Option<AccountId>,
 }
 
@@ -46,6 +47,7 @@ impl Contract {
             first: None,
             second: None,
             streaming_id: None,
+            token_id: None,
         }
     }
 
@@ -58,37 +60,81 @@ impl Contract {
     }
 
     pub fn start(&mut self) -> Promise {
-        let streaming_id = self.streaming_id.as_ref().unwrap();
-        let first = self.first.as_ref().unwrap().stream().unwrap().clone();
-        let second = self.second.as_ref().unwrap().stream().unwrap();
+        let first_player_stream = self
+            .first_player()
+            .stream()
+            .expect("first players stream was not registered")
+            .clone();
+        let second_player_stream = self
+            .second_player()
+            .stream()
+            .expect("second players stream was not registered")
+            .clone();
 
         self.turn = Some(0);
-        let promise = start_stream(streaming_id.clone(), first);
+        let streaming_id = self.streaming_id().clone();
 
-        let promise = promise.then(start_stream(streaming_id.clone(), second.clone()));
+        log!(
+            "first stream: {}, second: {}",
+            first_player_stream,
+            second_player_stream
+        );
+        let start_first_player_stream =
+            start_stream(streaming_id.clone(), first_player_stream.clone());
+        let pause_first_player_stream = pause_stream(streaming_id.clone(), first_player_stream);
+        let start_second_player_stream = start_stream(streaming_id, second_player_stream);
 
-        promise.then(pause_stream(streaming_id.clone(), second.clone()))
+        start_first_player_stream
+            .then(pause_first_player_stream)
+            .then(start_second_player_stream)
     }
 
     pub fn make_turn(&mut self, x: u8, y: u8) -> Promise {
-        let first = self.first.as_ref().unwrap();
-        let second = self.second.as_ref().unwrap();
         let current = env::signer_account_id();
-        let field = self.field.as_mut().unwrap();
 
-        let rem = self.turn.as_ref().unwrap() % 2;
+        let rem = self
+            .turn
+            .as_ref()
+            .expect("method start wasn't called: turns is not initialized")
+            % 2;
         if rem == 0 {
-            log!("first: {}, current: {}", first.account(), current);
-            assert!(first.account() == &current, "it's first player's turn");
-            field.set_x(x, y);
-            *self.turn.as_mut().unwrap() += 1;
-            self.check_winner(self.first.as_ref().unwrap(), self.second.as_ref().unwrap())
+            log!(
+                "first: {}, current: {}",
+                self.first_player().account(),
+                current
+            );
+            assert!(
+                self.first_player().account() == &current,
+                "it's first player's turn"
+            );
+            self.field
+                .as_mut()
+                .expect("method start wasn't called: field is not initialized")
+                .set_x(x, y);
+            *self
+                .turn
+                .as_mut()
+                .expect("method start wasn't called: turns is not initialized") += 1;
+            self.check_winner(self.first_player(), self.second_player())
         } else if rem == 1 {
-            log!("first: {}, current: {}", first.account(), current);
-            assert!(second.account() == &current, "it's second player's turn");
-            field.set_o(x, y);
-            *self.turn.as_mut().unwrap() += 1;
-            self.check_winner(self.second.as_ref().unwrap(), self.first.as_ref().unwrap())
+            log!(
+                "first: {}, current: {}",
+                self.first_player().account(),
+                current
+            );
+            assert!(
+                self.second_player().account() == &current,
+                "it's second player's turn"
+            );
+            self.field
+                .as_mut()
+                .expect("method start wasn't called: field is not initialized")
+                .set_o(x, y);
+            *self
+                .turn
+                .as_mut()
+                .expect("method start wasn't called: turns is not initialized") += 1;
+            self.check_winner(self.second_player(), self.first_player())
         } else {
             unreachable!()
         }
@@ -102,17 +148,22 @@ impl Contract {
     ) -> Promise {
         let res = call_result.unwrap();
         log!("res: {:?}", res);
-        // let withdrawn = res.get("tokens_total_withdrawn").unwrap().as_u64().unwrap() as u128;
-        let withdrawn = 0;
-        let win_money = if self.first.as_ref().unwrap().account() == &player_id {
-            self.first.as_ref().unwrap().deposit().0
-        } else if self.second.as_ref().unwrap().account() == &player_id {
-            self.second.as_ref().unwrap().deposit().0
+        let withdrawn: u128 = res
+            .get("tokens_total_withdrawn")
+            .and_then(|v| v.as_str())
+            .expect("unexpected response from roke.to contract")
+            .parse()
+            .expect("couldn't parse tokens amount in roke.to response");
+        let win_money = if self.first_player().account() == &player_id {
+            self.first_player().deposit().0
+        } else if self.second_player().account() == &player_id {
+            self.second_player().deposit().0
         } else {
             unreachable!();
         } - withdrawn;
-        log!("reward {} tokens to {}", win_money, player_id);
-        wrap::ext(AccountId::new_unchecked("wrap.testnet".to_string()))
+        let win_money = win_money / 100 * 90;
+        log!("reward {} tokens (90%) to {}", win_money, player_id);
+        token::ext(self.token_id.as_ref().unwrap().clone())
             .with_attached_deposit(1)
             .ft_transfer_call(
                 player_id,
@@ -145,13 +196,29 @@ impl Contract {
 }
 
 impl Contract {
+    fn streaming_id(&self) -> &AccountId {
+        self.streaming_id
+            .as_ref()
+            .expect("streaming id should be connected by now")
+    }
+
+    fn first_player(&self) -> &Player {
+        self.first.as_ref().expect("first player is not registered")
+    }
+
+    fn second_player(&self) -> &Player {
+        self.second
+            .as_ref()
+            .expect("second player is not registered")
+    }
+
     fn check_winner(&self, active: &Player, passive: &Player) -> Promise {
         let field = self.field.as_ref().unwrap();
         let streaming_id = self.streaming_id.as_ref().unwrap();
         match field.get_winner() {
             State::Empty => {
-                pause_stream(streaming_id.clone(), active.stream().unwrap().clone()).then(
-                    start_stream(streaming_id.clone(), passive.stream().unwrap().clone()),
+                pause_stream(streaming_id.clone(), passive.stream().unwrap().clone()).then(
+                    start_stream(streaming_id.clone(), active.stream().unwrap().clone()),
                 )
             }
             State::X => {

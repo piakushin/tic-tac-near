@@ -3,6 +3,7 @@ Tic tac toe
 
 A [smart contract] written in [Rust].
 It is a game for a creatures with a single neuron. In which you should put 3 X or O in a row before your opponent.
+Why would I implement such simple game? Because I'm also a single cell organism.
 
 
 Quick Start

@@ -2,7 +2,7 @@ use near_contract_standards::fungible_token::receiver::FungibleTokenReceiver;
 use near_sdk::{env, json_types::U128, log, near_bindgen, AccountId, Gas, PromiseOrValue};
 
 use crate::{
-    external::{streaming_roketo::streaming_roketo, wrap_near::wrap, TGAS},
+    external::{streaming_roketo::streaming_roketo, token::token, TGAS},
     field::Field,
     player::Player,
     Contract, ContractExt,
@@ -16,9 +16,11 @@ impl FungibleTokenReceiver for Contract {
         amount: U128,
         msg: String,
     ) -> PromiseOrValue<U128> {
+        let token_id = env::predecessor_account_id();
         log!(
-            "received {:?} tokens from {} with: {}",
+            "received {:?}[{}] tokens from {} with: {}",
             amount,
+            token_id,
             sender_id,
             msg
         );
@@ -26,6 +28,9 @@ impl FungibleTokenReceiver for Contract {
         assert!(self.field.is_none(), "Game already started");
 
         if self.first.is_none() {
+            assert!(self.token_id.is_none(), "somehow token ID is already set");
+            self.token_id = Some(token_id);
+
             log!(
                 "first player registered: {} with deposit: {:?}",
                 sender_id,
@@ -34,6 +39,14 @@ impl FungibleTokenReceiver for Contract {
             self.first = Some(Player::new(sender_id, amount));
             PromiseOrValue::Value(U128::from(0))
         } else if self.second.is_none() {
+            assert!(
+                self.token_id
+                    .as_ref()
+                    .expect("somehow token ID is NOT set yet")
+                    == &token_id,
+                "wrong token id"
+            );
+            *self.token_id.as_mut().unwrap() = token_id.clone();
             assert!(
                 self.first.as_ref().unwrap().deposit() == amount,
                 "deposit should be: {amount:?}"
@@ -46,16 +59,14 @@ impl FungibleTokenReceiver for Contract {
             self.second = Some(Player::new(sender_id, amount));
 
             log!("create stream for first player");
-            let ft_contract_id = env::predecessor_account_id();
             let streaming_id = self.streaming_id.as_ref().unwrap();
-            log!("tokens staked: [{}]", ft_contract_id);
 
             let memo = format!(
                 "Roketo transfer: {}",
                 self.first.as_ref().unwrap().account()
             );
             let msg = "{\"Create\":{\"request\":{\"balance\":\"200000000000000000000000\",\"owner_id\":\"tic-tac-near.vengone.testnet\",\"receiver_id\":\"vengone.testnet\",\"token_name\":\"wrap.testnet\",\"tokens_per_sec\":\"1000\",\"is_locked\":false,\"is_auto_start_enabled\":false,\"description\":\"{\\\"player\\\":\\\"first\\\"}\"}}}".to_string();
-            let promise = wrap::ext(ft_contract_id.clone())
+            let promise = token::ext(token_id.clone())
                 .with_static_gas(Gas(60 * TGAS))
                 .with_attached_deposit(1)
                 .ft_transfer_call(streaming_id.clone(), amount, memo, msg);
@@ -77,7 +88,7 @@ impl FungibleTokenReceiver for Contract {
             );
             let msg = "{\"Create\":{\"request\":{\"balance\":\"200000000000000000000000\",\"owner_id\":\"tic-tac-near.vengone.testnet\",\"receiver_id\":\"vengone1.testnet\",\"token_name\":\"wrap.testnet\",\"tokens_per_sec\":\"1000\",\"is_locked\":false,\"is_auto_start_enabled\":false,\"description\":\"{\\\"player\\\":\\\"second\\\"}\"}}}".to_string();
             let promise = promise.then(
-                wrap::ext(ft_contract_id)
+                token::ext(token_id)
                     .with_static_gas(Gas(60 * TGAS))
                     .with_attached_deposit(1)
                     .ft_transfer_call(streaming_id.clone(), amount, memo, msg),
