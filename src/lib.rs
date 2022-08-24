@@ -49,8 +49,16 @@ impl Contract {
         }
     }
 
-    pub fn start(&mut self, streaming_id: AccountId) -> Promise {
-        self.streaming_id = Some(streaming_id.clone());
+    pub fn connect_streaming_contract(&mut self, streaming_id: AccountId) {
+        assert!(
+            self.streaming_id.is_none(),
+            "streaming contract is already connected"
+        );
+        self.streaming_id = Some(streaming_id);
+    }
+
+    pub fn start(&mut self) -> Promise {
+        let streaming_id = self.streaming_id.as_ref().unwrap();
         let first = self.first.as_ref().unwrap().stream().unwrap().clone();
         let second = self.second.as_ref().unwrap().stream().unwrap();
 
@@ -59,7 +67,7 @@ impl Contract {
 
         let promise = promise.then(start_stream(streaming_id.clone(), second.clone()));
 
-        promise.then(pause_stream(streaming_id, second.clone()))
+        promise.then(pause_stream(streaming_id.clone(), second.clone()))
     }
 
     pub fn make_turn(&mut self, x: u8, y: u8) -> Promise {

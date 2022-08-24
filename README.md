@@ -14,6 +14,8 @@ Quick Start
 
 3. Then you must deploy the game contract.
 
+4. Then you must add streaming contract via `connect_streaming_contract`.
+
 4. Then first player must deposit any amount of any token to the game contract account. And the second player must do exactly the same: with the same token, with the same amount.
 
 5. Then you must call `start` method with account id of Roke.to contract. It will start stream of tokens back to the second player's account. The faster the first player will make it's turn, the less tokens will the second sucker recieve and vice versa.
@@ -25,7 +27,10 @@ Quick Start
 
 Interacting With The Contract
 =============================
-## `start(streaming_id: AccountId)`
+## `connect_streaming_contract(streaming_id: AccountId)`
+Connects game contract with streaming contract.
+
+## `start()`
 Starts the game with given streaming account id. 
 ```sh
 $ near call tic-tac-near.YOURNAME.testnet start\

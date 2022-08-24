@@ -47,8 +47,7 @@ impl FungibleTokenReceiver for Contract {
 
             log!("create stream for first player");
             let ft_contract_id = env::predecessor_account_id();
-            let streaming_id =
-                AccountId::new_unchecked("streaming-roketo.vengone.testnet".to_string());
+            let streaming_id = self.streaming_id.as_ref().unwrap();
             log!("tokens staked: [{}]", ft_contract_id);
 
             let memo = format!(
@@ -61,15 +60,15 @@ impl FungibleTokenReceiver for Contract {
                 .with_attached_deposit(1)
                 .ft_transfer_call(streaming_id.clone(), amount, memo, msg);
 
-            let promise = promise.then(streaming_roketo::ext(streaming_id.clone()).get_account(
-                AccountId::new_unchecked("tic-tac-near.vengone.testnet".to_string()),
-            ));
-
+            let current_account = env::current_account_id();
             let promise = promise.then(
-                Self::ext(AccountId::new_unchecked(
-                    "tic-tac-near.vengone.testnet".to_string(),
-                ))
-                .query_stream_id_callback(AccountId::new_unchecked("vengone.testnet".to_string())),
+                streaming_roketo::ext(streaming_id.clone()).get_account(current_account.clone()),
+            );
+
+            let first_account_id = self.first.as_ref().unwrap().account();
+            let promise = promise.then(
+                Self::ext(current_account.clone())
+                    .query_stream_id_callback(first_account_id.clone()),
             );
 
             let memo = format!(
@@ -84,15 +83,13 @@ impl FungibleTokenReceiver for Contract {
                     .ft_transfer_call(streaming_id.clone(), amount, memo, msg),
             );
 
-            let promise = promise.then(streaming_roketo::ext(streaming_id).get_account(
-                AccountId::new_unchecked("tic-tac-near.vengone.testnet".to_string()),
-            ));
-
             let promise = promise.then(
-                Self::ext(AccountId::new_unchecked(
-                    "tic-tac-near.vengone.testnet".to_string(),
-                ))
-                .query_stream_id_callback(AccountId::new_unchecked("vengone1.testnet".to_string())),
+                streaming_roketo::ext(streaming_id.clone()).get_account(current_account.clone()),
+            );
+
+            let second_account_id = self.second.as_ref().unwrap().account();
+            let promise = promise.then(
+                Self::ext(current_account).query_stream_id_callback(second_account_id.clone()),
             );
             self.field = Some(Field::new());
             PromiseOrValue::Promise(promise)

@@ -25,6 +25,16 @@ near deploy \
     --accountId tic-tac-near.vengone.testnet \
     --wasmFile ./out/tic_tac_near.wasm
 
+echo "\n\n\n<------------------------------------------------------------->"
+echo "Add streaming contract"
+echo "<------------------------------------------------------------->"
+near call tic-tac-near.vengone.testnet connect_streaming_contract \
+    '{"streaming_id": "streaming-roketo.vengone.testnet"}' \
+    --accountId tic-tac-near.vengone.testnet \
+    --gas 300000000000000
+
+
+
 # echo "\n\n\n<------------------------------------------------------------->"
 # echo "Register game contract account."
 # echo "<------------------------------------------------------------->"
