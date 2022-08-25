@@ -30,7 +30,7 @@ echo "Add streaming contract"
 echo "<------------------------------------------------------------->"
 near call tic-tac-near.vengone.testnet connect_streaming_contract \
     '{"streaming_id": "streaming-roketo.vengone.testnet"}' \
-    --accountId tic-tac-near.vengone.testnet \
+    --accountId vengone.testnet \
     --gas 300000000000000
 
 

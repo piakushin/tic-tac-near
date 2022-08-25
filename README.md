@@ -11,21 +11,65 @@ Quick Start
 
 1. Before you compile this code, you will need to install Rust with [correct target]
 
-2. Before initializing the game you must deploy Roke.to smart contract. It's account Id will be passed to game contract on start.
+2. Before initializing the game you must deploy Roke.to smart contract. 
+It's account Id will be passed to the game contract on start.
 
 ### Manual mode
+4. Deploy the game contract.
+```sh
+near deploy \
+    --accountId tic-tac-near.YOURNAME.testnet \
+    --wasmFile ./out/tic_tac_near.wasm
+```
 
-3. Then you must deploy the game contract.
+4. Then you must connect roke.to streaming contract.
+```sh
+near call tic-tac-near.YOURNAME.testnet connect_streaming_contract \
+    '{"streaming_id": "streaming-roketo.YOURNAME.testnet"}' \
+    --accountId tic-tac-near.YOURNAME.testnet \
+    --gas 300000000000000
+```
 
-4. Then you must add streaming contract via `connect_streaming_contract`.
+4. Then first player must deposit any amount of any token to the game contract account.
+Message should contain JSON map with key `tokens_per_sec` and a value as a string.
+Example with wNEAR FT:
+```sh
+near call wrap.testnet ft_transfer_call \
+    '{"receiver_id": "tic-tac-near.YOURNAME.testnet", "amount": "300000000000000000000000", "msg": "{\"tokens_per_sec\": \"1000000\"}"}' \
+    --depositYocto 1 \
+    --gas 300000000000000 \
+    --accountId FIRST_PLAYER.testnet
+```
 
-4. Then first player must deposit any amount of any token to the game contract account. And the second player must do exactly the same: with the same token, with the same amount.
+5. And the second player must do exactly the same: with the same token, with the same amount.
+Second player message unimportant, it won't be used anywhere.
+Example with wNEAR FT:
+```sh
+near call wrap.testnet ft_transfer_call \
+    '{"receiver_id": "tic-tac-near.YOURNAME.testnet", "amount": "300000000000000000000000", "msg": ""}' \
+    --depositYocto 1 \
+    --gas 300000000000000 \
+    --accountId SECOND_PLAYER.testnet
+```
 
-5. Then you must call `start` method with account id of Roke.to contract. It will start stream of tokens back to the second player's account. The faster the first player will make it's turn, the less tokens will the second sucker recieve and vice versa.
+6. Now you can start the game.
+It will start stream of tokens back to the second player's account.
+The faster the first player will make it's turn, the less tokens will the second sucker recieve and vice versa.
+```sh
+near call tic-tac-near.YOURNAME.testnet start\
+    --accountId YOURNAME.testnet \
+    --gas 300000000000000
+```
 
-6. One by on make turns with `make_turn` method (who would believe).
+7. One by on make turns with `make_turn` method (who would believe).
+```sh
+near call tic-tac-near.YOURNAME.testnet make_turn \
+    '{"x": 1, "y": 1}' \
+    --accountId FIRST_PLAYER.testnet \
+    --gas 300000000000000
+```
 
-7. Once any player have reached winning combination, all remaining tokens on stream contract will be transferred to the winner as a reward for it's miserable life.
+8. Once any player have reached winning combination, all remaining tokens on stream contract will be transferred to the winner as a reward for it's miserable life.
 
 ### Auto mode
 3. Call:
@@ -39,19 +83,25 @@ Quick Start
 ./test_game.sh $FIRST_STREAM $SECOND_STREAM
 ```
 
-6. Celebrate, you don't need to play this very complicated game. Blockchain will do everything for you!
+6. Celebrate, you don't need to play this very complicated game.
+Blockchain will do everything for you!
 
 
 Interacting With The Contract
 =============================
 ## `connect_streaming_contract(streaming_id: AccountId)`
 Connects game contract with streaming contract.
+```sh
+near call tic-tac-near.YOURNAME.testnet connect_streaming_contract \
+    '{"streaming_id": "streaming-roketo.YOURNAME.testnet"}' \
+    --accountId YOURNAME.testnet \
+    --gas 300000000000000
+```
 
 ## `start()`
-Starts the game with given streaming account id. 
+Starts the game. Now first player should be quick to make first turn.
 ```sh
 $ near call tic-tac-near.YOURNAME.testnet start\
-    '{"streaming_id": "STREAMING_ID"}' \
     --accountId YOURNAME.testnet \
     --gas 300000000000000
 ```
