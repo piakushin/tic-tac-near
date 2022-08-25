@@ -17,7 +17,7 @@ use near_sdk::{
     json_types::U128,
     log, near_bindgen,
     serde_json::Value,
-    AccountId, Gas, Promise, PromiseError,
+    AccountId, Gas, Promise, PromiseError, PromiseOrValue,
 };
 use player::Player;
 use serde::Serialize;
@@ -31,6 +31,7 @@ pub struct Contract {
     turn: Option<u8>,
     first: Option<Player>,
     second: Option<Player>,
+    deposit: u128,
     token_id: Option<AccountId>,
     streaming_id: Option<AccountId>,
 }
@@ -46,6 +47,7 @@ impl Contract {
             turn: None,
             first: None,
             second: None,
+            deposit: 0,
             streaming_id: None,
             token_id: None,
         }
@@ -98,11 +100,6 @@ impl Contract {
             .expect("method start wasn't called: turns is not initialized")
             % 2;
         if rem == 0 {
-            log!(
-                "first: {}, current: {}",
-                self.first_player().account(),
-                current
-            );
             assert!(
                 self.first_player().account() == &current,
                 "it's first player's turn"
@@ -117,11 +114,6 @@ impl Contract {
                 .expect("method start wasn't called: turns is not initialized") += 1;
             self.check_winner(self.first_player(), self.second_player())
         } else if rem == 1 {
-            log!(
-                "first: {}, current: {}",
-                self.first_player().account(),
-                current
-            );
             assert!(
                 self.second_player().account() == &current,
                 "it's second player's turn"
@@ -146,6 +138,7 @@ impl Contract {
             turn: None,
             first: None,
             second: None,
+            deposit: 0,
             token_id: None,
             streaming_id: None,
         };
@@ -223,9 +216,29 @@ impl Contract {
             .expect("second player is not registered")
     }
 
+    fn register_first_player(
+        &mut self,
+        account: AccountId,
+        token_id: AccountId,
+        deposit: U128,
+    ) -> PromiseOrValue<U128> {
+        assert!(self.token_id.is_none(), "somehow token ID is already set");
+
+        log!("game token set to: {}", token_id);
+        self.token_id = Some(token_id);
+
+        log!("deposit set to: {}", deposit.0);
+        self.deposit = deposit.0;
+
+        log!("first player registered: {} ", account,);
+        self.first = Some(Player::new(account, deposit));
+        PromiseOrValue::Value(U128::from(0))
+    }
+
     fn check_winner(&self, active: &Player, passive: &Player) -> Promise {
         let field = self.field.as_ref().unwrap();
         let streaming_id = self.streaming_id.as_ref().unwrap();
+        let current_id = env::current_account_id();
         match field.get_winner() {
             State::Empty => {
                 pause_stream(streaming_id.clone(), passive.stream().unwrap().clone()).then(
@@ -233,6 +246,7 @@ impl Contract {
                 )
             }
             State::X => {
+                log!("player {} WON!", active.account());
                 let promise = stop_stream(streaming_id.clone(), active.stream().unwrap().clone());
                 let promise = promise.then(stop_stream(
                     streaming_id.clone(),
@@ -243,14 +257,13 @@ impl Contract {
                     active.stream().unwrap().clone(),
                 ));
                 let promise = promise.then(
-                    Self::ext(AccountId::new_unchecked(String::from(
-                        "tic-tac-near.vengone.testnet",
-                    )))
-                    .query_transferred_tokens_callback(active.account().clone()),
+                    Self::ext(current_id)
+                        .query_transferred_tokens_callback(active.account().clone()),
                 );
                 promise
             }
             State::O => {
+                log!("player {} WON!", active.account());
                 let promise = stop_stream(streaming_id.clone(), active.stream().unwrap().clone());
                 let promise = promise.then(stop_stream(
                     streaming_id.clone(),
@@ -261,10 +274,8 @@ impl Contract {
                     active.stream().unwrap().clone(),
                 ));
                 let promise = promise.then(
-                    Self::ext(AccountId::new_unchecked(String::from(
-                        "tic-tac-near.vengone.testnet",
-                    )))
-                    .query_transferred_tokens_callback(passive.account().clone()),
+                    Self::ext(current_id)
+                        .query_transferred_tokens_callback(passive.account().clone()),
                 );
                 promise
             }

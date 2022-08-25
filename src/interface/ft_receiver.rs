@@ -1,9 +1,12 @@
 use near_contract_standards::fungible_token::receiver::FungibleTokenReceiver;
-use near_sdk::{env, json_types::U128, log, near_bindgen, AccountId, Gas, PromiseOrValue};
+use near_sdk::{
+    env, json_types::U128, log, near_bindgen, serde_json, AccountId, Gas, PromiseOrValue,
+};
 
 use crate::{
     external::{streaming_roketo::streaming_roketo, token::token, TGAS},
     field::Field,
+    interface::RoketoStreamingCreateRequest,
     player::Player,
     Contract, ContractExt,
 };
@@ -28,16 +31,7 @@ impl FungibleTokenReceiver for Contract {
         assert!(self.field.is_none(), "Game already started");
 
         if self.first.is_none() {
-            assert!(self.token_id.is_none(), "somehow token ID is already set");
-            self.token_id = Some(token_id);
-
-            log!(
-                "first player registered: {} with deposit: {:?}",
-                sender_id,
-                amount
-            );
-            self.first = Some(Player::new(sender_id, amount));
-            PromiseOrValue::Value(U128::from(0))
+            self.register_first_player(sender_id, token_id, amount)
         } else if self.second.is_none() {
             assert!(
                 self.token_id
@@ -46,9 +40,9 @@ impl FungibleTokenReceiver for Contract {
                     == &token_id,
                 "wrong token id"
             );
-            *self.token_id.as_mut().unwrap() = token_id.clone();
+
             assert!(
-                self.first.as_ref().unwrap().deposit() == amount,
+                self.first_player().deposit() == amount,
                 "deposit should be: {amount:?}"
             );
             log!(
@@ -57,52 +51,67 @@ impl FungibleTokenReceiver for Contract {
                 amount
             );
             self.second = Some(Player::new(sender_id, amount));
+            let first = self.first_player();
 
             log!("create stream for first player");
-            let streaming_id = self.streaming_id.as_ref().unwrap();
+            let streaming_id = self.streaming_id();
 
-            let memo = format!(
-                "Roketo transfer: {}",
-                self.first.as_ref().unwrap().account()
-            );
-            let msg = "{\"Create\":{\"request\":{\"balance\":\"200000000000000000000000\",\"owner_id\":\"tic-tac-near.vengone.testnet\",\"receiver_id\":\"vengone.testnet\",\"token_name\":\"wrap.testnet\",\"tokens_per_sec\":\"1000\",\"is_locked\":false,\"is_auto_start_enabled\":false,\"description\":\"{\\\"player\\\":\\\"first\\\"}\"}}}".to_string();
-            let promise = token::ext(token_id.clone())
+            let memo = format!("Roketo transfer: {}", first.account());
+            let current_account = env::current_account_id();
+            let mut request = RoketoStreamingCreateRequest {
+                balance: self.deposit.to_string(),
+                owner_id: current_account.clone(),
+                receiver_id: first.account().clone(),
+                token_name: token_id.clone(),
+                tokens_per_sec: 1000.to_string(),
+                is_locked: false,
+                is_auto_start_enabled: false,
+                description: "{\"player\": \"first\"}".to_string(),
+            };
+            let request_json =
+                serde_json::to_string(&request).expect("failed to serialize request");
+            let msg = format!("{{\"Create\": {{ \"request\": {request_json} }}}}");
+
+            let first_player_deposit_to_stream = token::ext(token_id.clone())
                 .with_static_gas(Gas(60 * TGAS))
                 .with_attached_deposit(1)
                 .ft_transfer_call(streaming_id.clone(), amount, memo, msg);
 
-            let current_account = env::current_account_id();
-            let promise = promise.then(
-                streaming_roketo::ext(streaming_id.clone()).get_account(current_account.clone()),
-            );
+            let first_player_get_stream_account =
+                streaming_roketo::ext(streaming_id.clone()).get_account(current_account.clone());
 
-            let first_account_id = self.first.as_ref().unwrap().account();
-            let promise = promise.then(
-                Self::ext(current_account.clone())
-                    .query_stream_id_callback(first_account_id.clone()),
-            );
+            let first_account_id = first.account().clone();
+            let first_player_query_stream_id =
+                Self::ext(current_account.clone()).query_stream_id_callback(first_account_id);
 
-            let memo = format!(
-                "Roketo transfer: {}",
-                self.second.as_ref().unwrap().account()
-            );
-            let msg = "{\"Create\":{\"request\":{\"balance\":\"200000000000000000000000\",\"owner_id\":\"tic-tac-near.vengone.testnet\",\"receiver_id\":\"vengone1.testnet\",\"token_name\":\"wrap.testnet\",\"tokens_per_sec\":\"1000\",\"is_locked\":false,\"is_auto_start_enabled\":false,\"description\":\"{\\\"player\\\":\\\"second\\\"}\"}}}".to_string();
-            let promise = promise.then(
-                token::ext(token_id)
-                    .with_static_gas(Gas(60 * TGAS))
-                    .with_attached_deposit(1)
-                    .ft_transfer_call(streaming_id.clone(), amount, memo, msg),
-            );
+            let second = self.second_player();
+            let memo = format!("Roketo transfer: {}", second.account());
+            request.receiver_id = second.account().clone();
+            request.description = "{\"player\": \"second\"}".to_string();
+            let request_json =
+                serde_json::to_string(&request).expect("failed to serialize request");
+            let msg = format!("{{\"Create\": {{ \"request\": {request_json} }}}}");
 
-            let promise = promise.then(
-                streaming_roketo::ext(streaming_id.clone()).get_account(current_account.clone()),
-            );
+            let second_player_deposit_to_stream = token::ext(token_id)
+                .with_static_gas(Gas(60 * TGAS))
+                .with_attached_deposit(1)
+                .ft_transfer_call(streaming_id.clone(), amount, memo, msg);
 
-            let second_account_id = self.second.as_ref().unwrap().account();
-            let promise = promise.then(
-                Self::ext(current_account).query_stream_id_callback(second_account_id.clone()),
-            );
+            let second_player_get_stream_account =
+                streaming_roketo::ext(streaming_id.clone()).get_account(current_account.clone());
+
+            let second_account_id = second.account().clone();
+            let second_player_query_stream_id =
+                Self::ext(current_account).query_stream_id_callback(second_account_id);
+
             self.field = Some(Field::new());
+
+            let promise = first_player_deposit_to_stream
+                .then(first_player_get_stream_account)
+                .then(first_player_query_stream_id)
+                .then(second_player_deposit_to_stream)
+                .then(second_player_get_stream_account)
+                .then(second_player_query_stream_id);
             PromiseOrValue::Promise(promise)
         } else {
             panic!("all players are in, registration closed");
