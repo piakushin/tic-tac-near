@@ -185,7 +185,7 @@ impl Contract {
         &mut self,
         #[callback_result] call_result: Result<HashMap<String, Value>, PromiseError>,
         player_id: AccountId,
-    ) {
+    ) -> U128 {
         let res = call_result.unwrap();
         let id = res.get("last_created_stream").unwrap().as_str().unwrap();
         log!("[{}] stream id: {}", player_id, id);
@@ -199,6 +199,7 @@ impl Contract {
         } else {
             panic!("unknown player ID");
         }
+        U128(0)
     }
 }
 
