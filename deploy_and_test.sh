@@ -62,7 +62,7 @@ echo "\n\n\n<------------------------------------------------------------->"
 echo "Register first player."
 echo "<------------------------------------------------------------->"
 near call wrap.testnet ft_transfer_call \
-    '{"receiver_id": "tic-tac-near.vengone.testnet", "amount": "300000000000000000000000", "msg": "test"}' \
+    '{"receiver_id": "tic-tac-near.vengone.testnet", "amount": "300000000000000000000000", "msg": "{\"tokens_per_sec\": \"10000\"}"}' \
     --depositYocto 1 \
     --gas 300000000000000 \
     --accountId vengone.testnet
@@ -92,7 +92,7 @@ echo "\n\n\n<------------------------------------------------------------->"
 echo "Register second player."
 echo "<------------------------------------------------------------->"
 near call wrap.testnet ft_transfer_call \
-    '{"receiver_id": "tic-tac-near.vengone.testnet", "amount": "300000000000000000000000", "msg": "test"}' \
+    '{"receiver_id": "tic-tac-near.vengone.testnet", "amount": "300000000000000000000000", "msg": ""}' \
     --depositYocto 1 \
     --gas 300000000000000 \
     --accountId vengone1.testnet

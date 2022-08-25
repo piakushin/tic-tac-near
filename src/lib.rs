@@ -31,8 +31,9 @@ pub struct Contract {
     turn: Option<u8>,
     first: Option<Player>,
     second: Option<Player>,
-    deposit: u128,
     token_id: Option<AccountId>,
+    deposit: u128,
+    tokens_per_sec: String,
     streaming_id: Option<AccountId>,
 }
 
@@ -50,6 +51,7 @@ impl Contract {
             deposit: 0,
             streaming_id: None,
             token_id: None,
+            tokens_per_sec: String::new(),
         }
     }
 
@@ -141,6 +143,7 @@ impl Contract {
             deposit: 0,
             token_id: None,
             streaming_id: None,
+            tokens_per_sec: String::new(),
         };
     }
 
@@ -221,6 +224,7 @@ impl Contract {
         account: AccountId,
         token_id: AccountId,
         deposit: U128,
+        tokens_per_sec: String,
     ) -> PromiseOrValue<U128> {
         assert!(self.token_id.is_none(), "somehow token ID is already set");
 
@@ -229,6 +233,9 @@ impl Contract {
 
         log!("deposit set to: {}", deposit.0);
         self.deposit = deposit.0;
+
+        log!("tokens streaming rate set to: {}/sec", tokens_per_sec);
+        self.tokens_per_sec = tokens_per_sec;
 
         log!("first player registered: {} ", account,);
         self.first = Some(Player::new(account, deposit));

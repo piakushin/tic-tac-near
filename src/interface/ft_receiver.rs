@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use near_contract_standards::fungible_token::receiver::FungibleTokenReceiver;
 use near_sdk::{
     env, json_types::U128, log, near_bindgen, serde_json, AccountId, Gas, PromiseOrValue,
@@ -31,7 +33,13 @@ impl FungibleTokenReceiver for Contract {
         assert!(self.field.is_none(), "Game already started");
 
         if self.first.is_none() {
-            self.register_first_player(sender_id, token_id, amount)
+            let msg_values: HashMap<String, String> = serde_json::from_str(&msg).unwrap();
+            let tokens_per_sec = msg_values
+                .get(&"tokens_per_sec".to_string())
+                .expect("entry required in msg, eg: {{ \"tokens_per_sec\": \"string\" }}")
+                .clone();
+
+            self.register_first_player(sender_id, token_id, amount, tokens_per_sec)
         } else if self.second.is_none() {
             assert!(
                 self.token_id
@@ -58,12 +66,13 @@ impl FungibleTokenReceiver for Contract {
 
             let memo = format!("Roketo transfer: {}", first.account());
             let current_account = env::current_account_id();
+
             let mut request = RoketoStreamingCreateRequest {
                 balance: self.deposit.to_string(),
                 owner_id: current_account.clone(),
                 receiver_id: first.account().clone(),
                 token_name: token_id.clone(),
-                tokens_per_sec: 1000.to_string(),
+                tokens_per_sec: self.tokens_per_sec.clone(),
                 is_locked: false,
                 is_auto_start_enabled: false,
                 description: "{\"player\": \"first\"}".to_string(),
