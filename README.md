@@ -2,7 +2,7 @@ Tic tac toe
 ===========
 
 A [smart contract] written in [Rust].
-It is a game for a creatures with a single neuron. In which you should put 3 X or O in a row before your opponent.
+It is a game even for a creatures with a single neuron. In which you should put 3 X or O in a row before your opponent.
 Why would I implement such simple game? Because I'm also a single cell organism.
 
 
@@ -11,7 +11,7 @@ Quick Start
 
 1. Before you compile this code, you will need to install Rust with [correct target]
 
-2. Before initializing the game you must deploy Roke.to smart contract. 
+2. Before initializing the game you must deploy streaming smart contract. 
 It's account Id will be passed to the game contract on start.
 
 ### Manual mode
@@ -22,7 +22,7 @@ near deploy \
     --wasmFile ./out/tic_tac_near.wasm
 ```
 
-4. Then you must connect roke.to streaming contract.
+4. Then you must connect streaming contract.
 ```sh
 near call tic-tac-near.YOURNAME.testnet connect_streaming_contract \
     '{"streaming_id": "streaming-roketo.YOURNAME.testnet"}' \
@@ -54,7 +54,7 @@ near call wrap.testnet ft_transfer_call \
 
 6. Now you can start the game.
 It will start stream of tokens back to the second player's account.
-The faster the first player will make it's turn, the less tokens will the second sucker recieve and vice versa.
+The faster the first player will make it's turn, the less tokens will the second recieve and vice versa.
 ```sh
 near call tic-tac-near.YOURNAME.testnet start\
     --accountId YOURNAME.testnet \
@@ -69,7 +69,15 @@ near call tic-tac-near.YOURNAME.testnet make_turn \
     --gas 300000000000000
 ```
 
-8. Once any player have reached winning combination, all remaining tokens on stream contract will be transferred to the winner as a reward for it's miserable life.
+8. Once any player have reached winning combination both streams will be stopped.
+
+9. To claim reward, call `claim_reward` method signed by the winner.
+All remaining tokens on stream contract will be transferred to the winner as a reward for it's miserable life
+```sh
+near call tic-tac-near.YOURNAME.testnet claim_reward \
+    --accountId FIRST_PLAYER.testnet \
+    --gas 300000000000000
+```
 
 ### Auto mode
 3. Call:
@@ -122,6 +130,14 @@ near call tic-tac-near.YOURNAME.testnet make_turn \
     --gas 300000000000000
 ```
 (you can choose your own coordinates for your moves, who would have thought).
+
+## `claim_reward()`
+Transfers remaining deposited money from both players to winner.
+```sh
+near call tic-tac-near.YOURNAME.testnet claim_reward \
+    --accountId FIRST_PLAYER.testnet \
+    --gas 300000000000000
+```
 
 ## `reset()`
 Completely resets game state. No refunds! (yet).
