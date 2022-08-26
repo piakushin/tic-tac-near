@@ -31,6 +31,7 @@ pub struct Contract {
     turn: Option<u8>,
     first: Option<Player>,
     second: Option<Player>,
+    winner: Option<AccountId>,
     token_id: Option<AccountId>,
     deposit: u128,
     tokens_per_sec: String,
@@ -48,6 +49,7 @@ impl Contract {
             turn: None,
             first: None,
             second: None,
+            winner: None,
             deposit: 0,
             streaming_id: None,
             token_id: None,
@@ -84,9 +86,10 @@ impl Contract {
             second_player_stream
         );
         let start_first_player_stream =
-            start_stream(streaming_id.clone(), first_player_stream.clone());
-        let pause_first_player_stream = pause_stream(streaming_id.clone(), first_player_stream);
-        let start_second_player_stream = start_stream(streaming_id, second_player_stream);
+            start_stream(streaming_id.clone(), first_player_stream.clone(), None);
+        let pause_first_player_stream =
+            pause_stream(streaming_id.clone(), first_player_stream, None);
+        let start_second_player_stream = start_stream(streaming_id, second_player_stream, None);
 
         start_first_player_stream
             .then(pause_first_player_stream)
@@ -140,11 +143,45 @@ impl Contract {
             turn: None,
             first: None,
             second: None,
+            winner: None,
             deposit: 0,
             token_id: None,
             streaming_id: None,
             tokens_per_sec: String::new(),
         };
+    }
+
+    pub fn claim_reward(&mut self) -> Promise {
+        let streaming_id = self.streaming_id();
+        let signer = env::signer_account_id();
+        let current_id = env::current_account_id();
+
+        assert!(
+            &signer == self.winner.as_ref().expect("there is no reward to claim"),
+            "wrong winner"
+        );
+
+        let (winner, loser) = if &signer == self.first_player().account() {
+            (self.first_player(), self.second_player())
+        } else if &signer == self.second_player().account() {
+            (self.second_player(), self.first_player())
+        } else {
+            unreachable!()
+        };
+
+        let get_winner_stream_details =
+            get_stream(streaming_id.clone(), winner.stream().unwrap().clone(), None);
+        let query_winner_transferred_tokens = Self::ext(current_id.clone())
+            .query_transferred_tokens_callback(winner.account().clone());
+        let get_loser_stream_details =
+            get_stream(streaming_id.clone(), loser.stream().unwrap().clone(), None);
+        let query_loser_transferred_tokens =
+            Self::ext(current_id).query_transferred_tokens_callback(loser.account().clone());
+
+        get_winner_stream_details
+            .then(query_winner_transferred_tokens)
+            .then(get_loser_stream_details)
+            .then(query_loser_transferred_tokens)
     }
 
     #[private]
@@ -154,13 +191,15 @@ impl Contract {
         player_id: AccountId,
     ) -> Promise {
         let res = call_result.unwrap();
-        log!("res: {:?}", res);
         let withdrawn: u128 = res
             .get("tokens_total_withdrawn")
             .and_then(|v| v.as_str())
             .expect("unexpected response from roke.to contract")
             .parse()
             .expect("couldn't parse tokens amount in roke.to response");
+
+        log!("withdrawn {} to {}", withdrawn, player_id);
+
         let win_money = if self.first_player().account() == &player_id {
             self.first_player().deposit().0
         } else if self.second_player().account() == &player_id {
@@ -172,12 +211,7 @@ impl Contract {
         log!("reward {} tokens (90%) to {}", win_money, player_id);
         token::ext(self.token_id.as_ref().unwrap().clone())
             .with_attached_deposit(1)
-            .ft_transfer_call(
-                player_id,
-                U128::from(win_money),
-                String::new(),
-                String::new(),
-            )
+            .ft_transfer(player_id, U128::from(win_money), String::new())
     }
 
     #[private]
@@ -200,6 +234,11 @@ impl Contract {
             panic!("unknown player ID");
         }
         U128(0)
+    }
+
+    #[private]
+    pub fn set_winner(&mut self, winner: AccountId) {
+        self.winner = Some(winner);
     }
 }
 
@@ -244,73 +283,60 @@ impl Contract {
     }
 
     fn check_winner(&self, active: &Player, passive: &Player) -> Promise {
-        let field = self.field.as_ref().unwrap();
-        let streaming_id = self.streaming_id.as_ref().unwrap();
-        let current_id = env::current_account_id();
-        match field.get_winner() {
-            State::Empty => {
-                pause_stream(streaming_id.clone(), passive.stream().unwrap().clone()).then(
-                    start_stream(streaming_id.clone(), active.stream().unwrap().clone()),
-                )
-            }
-            State::X => {
+        match self.field.as_ref().unwrap().get_winner() {
+            State::Empty => pause_stream(
+                self.streaming_id().clone(),
+                passive.stream().unwrap().clone(),
+                None,
+            )
+            .then(start_stream(
+                self.streaming_id().clone(),
+                active.stream().unwrap().clone(),
+                None,
+            )),
+            _ => {
                 log!("player {} WON!", active.account());
-                let promise = stop_stream(streaming_id.clone(), active.stream().unwrap().clone());
-                let promise = promise.then(stop_stream(
-                    streaming_id.clone(),
+                let stop_winner_stream = stop_stream(
+                    self.streaming_id().clone(),
+                    active.stream().unwrap().clone(),
+                    Some(Gas(100 * TGAS)),
+                );
+                let stop_loser_stream = stop_stream(
+                    self.streaming_id().clone(),
                     passive.stream().unwrap().clone(),
-                ));
-                let promise = promise.then(get_stream(
-                    streaming_id.clone(),
-                    active.stream().unwrap().clone(),
-                ));
-                let promise = promise.then(
-                    Self::ext(current_id)
-                        .query_transferred_tokens_callback(active.account().clone()),
+                    Some(Gas(100 * TGAS)),
                 );
-                promise
-            }
-            State::O => {
-                log!("player {} WON!", active.account());
-                let promise = stop_stream(streaming_id.clone(), active.stream().unwrap().clone());
-                let promise = promise.then(stop_stream(
-                    streaming_id.clone(),
-                    active.stream().unwrap().clone(),
-                ));
-                let promise = promise.then(get_stream(
-                    streaming_id.clone(),
-                    active.stream().unwrap().clone(),
-                ));
-                let promise = promise.then(
-                    Self::ext(current_id)
-                        .query_transferred_tokens_callback(passive.account().clone()),
-                );
-                promise
+                let set_winner =
+                    Self::ext(env::current_account_id()).set_winner(active.account().clone());
+                stop_winner_stream.then(stop_loser_stream).then(set_winner)
             }
         }
     }
 }
 
-fn streaming(streaming_id: AccountId) -> StreamingRoketoExt {
-    streaming_roketo::ext(streaming_id)
-        .with_attached_deposit(1)
-        .with_static_gas(Gas(60 * TGAS))
+fn streaming(streaming_id: AccountId, gas: Option<Gas>) -> StreamingRoketoExt {
+    let streaming_ext = streaming_roketo::ext(streaming_id).with_attached_deposit(1);
+    if let Some(gas) = gas {
+        streaming_ext.with_static_gas(gas)
+    } else {
+        streaming_ext
+    }
 }
 
-fn start_stream(streaming_id: AccountId, stream_id: String) -> Promise {
-    streaming(streaming_id).start_stream(stream_id)
+fn start_stream(streaming_id: AccountId, stream_id: String, gas: Option<Gas>) -> Promise {
+    streaming(streaming_id, gas).start_stream(stream_id)
 }
 
-fn pause_stream(streaming_id: AccountId, stream_id: String) -> Promise {
-    streaming(streaming_id).pause_stream(stream_id)
+fn pause_stream(streaming_id: AccountId, stream_id: String, gas: Option<Gas>) -> Promise {
+    streaming(streaming_id, gas).pause_stream(stream_id)
 }
 
-fn stop_stream(streaming_id: AccountId, stream_id: String) -> Promise {
-    streaming(streaming_id).stop_stream(stream_id)
+fn stop_stream(streaming_id: AccountId, stream_id: String, gas: Option<Gas>) -> Promise {
+    streaming(streaming_id, gas).stop_stream(stream_id)
 }
 
-fn get_stream(streaming_id: AccountId, stream_id: String) -> Promise {
-    streaming(streaming_id).get_stream(stream_id)
+fn get_stream(streaming_id: AccountId, stream_id: String, gas: Option<Gas>) -> Promise {
+    streaming(streaming_id, gas).get_stream(stream_id)
 }
 
 impl Default for Contract {
