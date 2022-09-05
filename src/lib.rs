@@ -4,6 +4,9 @@ mod interface;
 mod player;
 mod views;
 
+#[cfg(test)]
+mod tests;
+
 use std::collections::HashMap;
 
 use external::{

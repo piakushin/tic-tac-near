@@ -1,12 +1,10 @@
 use std::collections::HashMap;
 
 use near_contract_standards::fungible_token::receiver::FungibleTokenReceiver;
-use near_sdk::{
-    env, json_types::U128, log, near_bindgen, serde_json, AccountId, Gas, PromiseOrValue,
-};
+use near_sdk::{env, json_types::U128, log, near_bindgen, serde_json, AccountId, PromiseOrValue};
 
 use crate::{
-    external::{streaming_roketo::streaming_roketo, token::token, TGAS},
+    external::{streaming_roketo::streaming_roketo, token::token},
     field::Field,
     interface::RoketoStreamingCreateRequest,
     player::Player,
@@ -82,7 +80,6 @@ impl FungibleTokenReceiver for Contract {
             let msg = format!("{{\"Create\": {{ \"request\": {request_json} }}}}");
 
             let first_player_deposit_to_stream = token::ext(token_id.clone())
-                .with_static_gas(Gas(60 * TGAS))
                 .with_attached_deposit(1)
                 .ft_transfer_call(streaming_id.clone(), amount, memo, msg);
 
@@ -102,7 +99,6 @@ impl FungibleTokenReceiver for Contract {
             let msg = format!("{{\"Create\": {{ \"request\": {request_json} }}}}");
 
             let second_player_deposit_to_stream = token::ext(token_id)
-                .with_static_gas(Gas(60 * TGAS))
                 .with_attached_deposit(1)
                 .ft_transfer_call(streaming_id.clone(), amount, memo, msg);
 
